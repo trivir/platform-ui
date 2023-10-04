@@ -73,7 +73,7 @@ router.beforeEach((to, _from, next) => {
     const urlParams = new URLSearchParams(window.location.search);
     const goto = urlParams.get('goto') || '';
     const logout = (validatedGoto) => {
-      SessionManager.logout().then(() => {
+      SessionManager.logout({ realmPath: realm }).then(() => {
         if (validatedGoto) {
           window.location.href = validatedGoto;
         } else {
@@ -83,31 +83,32 @@ router.beforeEach((to, _from, next) => {
     };
     let realm = urlParams.get('realm');
 
-    if (goto) {
-      // validate the goto param before logging out
-      const validateGotoAndLogout = () => {
-        generateAmApi({
-          apiVersion: 'protocol=2.1,resource=3.0',
-          path: `realms/root/realms/${realm}`,
-        }).post('users?_action=validateGoto', { goto: decodeURIComponent(goto) }, { withCredentials: true }).then((res) => {
-          logout(res.data.successURL);
-        }).catch(() => {
-          logout();
-        });
-      };
+    const validateGotoAndLogout = () => {
+      generateAmApi({
+        apiVersion: 'protocol=2.1,resource=3.0',
+        path: `realms/root/realms/${realm}`,
+      }).post('users?_action=validateGoto', { goto: decodeURIComponent(goto) }, { withCredentials: true }).then((res) => {
+        logout(res.data.successURL);
+      }).catch(() => {
+        logout();
+      });
+    };
 
-      if (!realm) {
-        // If no realm defined get it from am server info
-        getAmServerInfo().then((res) => {
-          realm = res.data?.realm === '/' ? 'root' : res.data.realm;
+    if (!realm) {
+      // If no realm defined get it from am server info
+      getAmServerInfo().then((res) => {
+        realm = res.data?.realm === '/' ? 'root' : res.data.realm;
+      }).catch(() => {
+        realm = 'root';
+      }).finally(() => {
+        if (goto) {
           validateGotoAndLogout();
-        }).catch(() => {
-          realm = 'root';
-          validateGotoAndLogout();
-        });
-      } else {
-        validateGotoAndLogout();
-      }
+        } else {
+          logout();
+        }
+      });
+    } else if (goto) {
+      validateGotoAndLogout();
     } else {
       logout();
     }
